@@ -2,7 +2,7 @@
 
 ## 🧱 Base
 
-* [ ] Criar schema no Supabase
+* [x] Criar schema no Supabase
 * [ ] Configurar projeto backend
 * [ ] Configurar projeto frontend
 
