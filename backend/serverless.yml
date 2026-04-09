@@ -1,0 +1,55 @@
+service: my-serverless-app
+
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1
+  environment:
+    DATABASE_URL: ${env:DATABASE_URL}
+
+functions:
+  hello:
+    handler: src/handlers/index.hello
+    events:
+      - http:
+          path: hello
+          method: get
+
+  getEvents:
+    handler: src/handlers/index.getEvents
+    events:
+      - http:
+          path: events
+          method: get
+
+  health:
+    handler: src/handlers/index.healthCheck
+    events:
+      - http:
+          path: health
+          method: get
+
+plugins:
+  - serverless-offline
+
+package:
+  individually: false
+  patterns:
+    - generated/prisma/**
+
+build:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: node20
+    format: esm
+    platform: node
+    external:
+      - pg  
+      - pg/*
+      - '@prisma/client'
+      - '.prisma/client'
+      - '../generated/prisma/*'
