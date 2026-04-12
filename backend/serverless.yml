@@ -8,6 +8,7 @@ provider:
   region: us-east-1
   environment:
     DATABASE_URL: ${env:DATABASE_URL}
+    MERCADOPAGO_ACCESS_TOKEN: ${env:MERCADOPAGO_ACCESS_TOKEN}
 
 functions:
   hello:
@@ -30,6 +31,20 @@ functions:
       - http:
           path: health
           method: get
+
+  createOrder:
+    handler: src/handlers/orders.default
+    events:
+      - http:
+          path: orders
+          method: post
+
+  webhook:
+    handler: src/handlers/webhook.default
+    events:
+      - http:
+          path: webhook
+          method: post
 
 plugins:
   - serverless-offline
