@@ -1,6 +1,7 @@
 import { prismaClient } from "../lib/prisma";
 import { getPaymentStatus } from "../services/payment";
 import { createTickets } from "../services/tickets";
+import { sendTicketEmail, buildTicketEmailHtml } from "../services/email";
 
 type WebhookRequest = {
   headers: Record<string, string>;
@@ -71,6 +72,8 @@ export default async function handler(req: any): Promise<WebhookResponse> {
         await createTicketsBatch(order.id, neededTickets);
       }
 
+      await sendOrderConfirmationEmail(order.id);
+
       return {
         statusCode: 200,
         body: JSON.stringify({
@@ -78,6 +81,7 @@ export default async function handler(req: any): Promise<WebhookResponse> {
           paymentId,
           orderId: order.id,
           ticketsCreated: true,
+          emailSent: true,
         }),
       };
     }
@@ -121,12 +125,21 @@ export default async function handler(req: any): Promise<WebhookResponse> {
 }
 
 async function createTicketsBatch(orderId: string, count: number) {
+  const orders = await prismaClient.$queryRaw<{ event_title: string }[]>`
+    SELECT e.title as event_title 
+    FROM orders o 
+    JOIN events e ON e.id = o.event_id 
+    WHERE o.id = ${orderId}
+  `;
+
+  const eventTitle = orders[0]?.event_title || "Evento";
   const tickets = [];
+
   for (let i = 0; i < count; i++) {
     tickets.push({
       orderId,
-      name: `Attendee ${i + 1}`,
-      email: "customer@example.com",
+      name: `Participante ${i + 1}`,
+      email: "cliente@email.com",
     });
   }
 
@@ -134,4 +147,20 @@ async function createTicketsBatch(orderId: string, count: number) {
     orderId,
     tickets,
   });
+
+  const createdTickets = await prismaClient.tickets.findMany({
+    where: { order_id: orderId },
+    select: { code: true, name: true },
+  });
+
+  try {
+    await sendTicketEmail({
+      to: "cliente@email.com",
+      subject: `🎫 Seus Ingressos - ${eventTitle}`,
+      html: buildTicketEmailHtml(eventTitle, createdTickets),
+    });
+    console.log("Confirmation email sent for order:", orderId);
+  } catch (emailErr) {
+    console.error("Failed to send confirmation email:", emailErr);
+  }
 }

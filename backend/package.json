@@ -32,6 +32,7 @@
     "dotenv": "^17.4.1",
     "mercadopago": "^1.1.1",
     "pg": "^8.20.0",
+    "resend": "^4.8.0",
     "serverless": "^4.33.3",
     "serverless-offline": "^14.5.0"
   }

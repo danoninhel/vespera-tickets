@@ -9,6 +9,8 @@ provider:
   environment:
     DATABASE_URL: ${env:DATABASE_URL}
     MERCADOPAGO_ACCESS_TOKEN: ${env:MERCADOPAGO_ACCESS_TOKEN}
+    RESEND_API_KEY: ${env:RESEND_API_KEY}
+    RESEND_FROM_EMAIL: ${env:RESEND_FROM_EMAIL}
 
 functions:
   hello:
