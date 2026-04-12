@@ -20,8 +20,8 @@
 
 ## ⏳ Expiração
 
-* [ ] Implementar lógica de expiração
-* [ ] Liberar vagas automaticamente
+* [x] Implementar lógica de expiração
+* [x] Liberar vagas automaticamente
 
 ---
 
