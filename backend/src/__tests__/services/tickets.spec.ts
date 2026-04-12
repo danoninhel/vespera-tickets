@@ -28,7 +28,7 @@ vi.mock("../lib/prisma", () => ({
   },
 }));
 
-import { createTickets, getTicketsByOrder, validateTicket, checkInTicket } from "./tickets";
+import { createTickets, getTicketsByOrder, validateTicket, checkInTicket } from "../services/tickets";
 
 describe("tickets service", () => {
   beforeEach(() => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { prismaClient } from "../lib/prisma";
-import { createEvent } from "./createEvent";
+import { createEvent } from "../services/createEvent";
 
 describe("createEvent", () => {
   beforeEach(async () => {

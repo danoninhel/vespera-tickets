@@ -1,14 +1,5 @@
 import { prismaClient } from "../lib/prisma";
-import { PrismaTransaction } from "../types";
-
-type CreateEventInput = {
-  title: string;
-  description: string;
-  image_url: string;
-  capacity: number;
-  metadata?: Record<string, unknown>;
-  artists: string[];
-};
+import { CreateEventInput } from "../types";
 
 function validateInput(input: CreateEventInput): void {
   if (!input.title || !input.title.trim()) {
@@ -40,11 +31,11 @@ export async function createEvent(input: CreateEventInput) {
         description,
         image_url,
         capacity,
-        metadata,
+        metadata: metadata as any || {},
       },
     });
 
-    const artistRecords = await findOrCreateArtists(tx, artists);
+    const artistRecords = await findOrCreateArtists(tx, artists || []);
 
     await tx.event_artists.createMany({
       data: artistRecords.map((artist) => ({
@@ -59,7 +50,7 @@ export async function createEvent(input: CreateEventInput) {
 }
 
 async function findOrCreateArtists(
-  tx: PrismaTransaction,
+  tx: any,
   artistNames: string[]
 ): Promise<{ id: string; name: string }[]> {
   const uniqueNames = [...new Set(artistNames.map((n) => n.trim()))];
@@ -74,7 +65,7 @@ async function findOrCreateArtists(
 }
 
 async function findOrCreateArtist(
-  tx: PrismaTransaction,
+  tx: any,
   name: string
 ): Promise<{ id: string; name: string }> {
   const existing = await tx.artists.findFirst({
@@ -85,17 +76,5 @@ async function findOrCreateArtist(
     return existing;
   }
 
-  try {
-    return await tx.artists.create({ data: { name } });
-  } catch {
-    const recovered = await tx.artists.findFirst({
-      where: { name: { equals: name, mode: "insensitive" } },
-    });
-
-    if (!recovered) {
-      throw new Error(`Failed to resolve artist: ${name}`);
-    }
-
-    return recovered;
-  }
+  return await tx.artists.create({ data: { name } });
 }

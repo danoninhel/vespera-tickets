@@ -18,7 +18,7 @@ vi.mock("mercadopago", () => ({
   },
 }));
 
-import { createPixPayment, getPaymentStatus, getPaymentByExternalReference } from "./payment";
+import { createPixPayment, getPaymentStatus, getPaymentByExternalReference } from "../services/payment";
 
 describe("payment service", () => {
   beforeEach(() => {

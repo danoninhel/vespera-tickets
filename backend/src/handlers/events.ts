@@ -177,6 +177,13 @@ export const addLotes = async (eventId: string, req: any) => {
 
     const event = await addLotesToEvent(eventId, body.lotes);
 
+    if (!event) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: "Event not found" }),
+      };
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify({ id: event.id, title: event.title, lotes: event.lotes }),

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { prismaClient } from "../lib/prisma";
-import { createOrder } from "./createOrder";
-import { expireOrders } from "./expiration";
+import { createOrder } from "../services/createOrder";
+import { expireOrders } from "../services/expiration";
 
 describe.skip("complete ticket flow", () => {
   const EVENT_ID = "11111111-1111-1111-1111-111111111111";

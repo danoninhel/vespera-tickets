@@ -62,6 +62,13 @@ functions:
           path: webhook
           method: post
 
+  expireOrders:
+    handler: src/handlers/expiration.expireOrders
+    events:
+      - schedule:
+          rate: rate(10 minutes)
+          enabled: true
+
 plugins:
   - serverless-offline
 

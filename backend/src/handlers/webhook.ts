@@ -1,7 +1,7 @@
 import { prismaClient } from "../lib/prisma";
 import { getPaymentStatus } from "../services/payment";
 import { createTickets } from "../services/tickets";
-import { sendTicketEmail, buildTicketEmailHtml } from "../services/email";
+import { sendTicketEmail, buildTicketEmailHtml, sendOrderConfirmationEmail } from "../services/email";
 
 type WebhookRequest = {
   headers: Record<string, string>;

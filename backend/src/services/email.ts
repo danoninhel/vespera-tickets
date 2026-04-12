@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { prismaClient } from "../lib/prisma";
 
 const resend = process.env.RESEND_API_KEY 
   ? new Resend(process.env.RESEND_API_KEY)
@@ -169,4 +170,34 @@ export function buildConfirmationEmailHtml(
     </body>
     </html>
   `;
+}
+
+export async function sendOrderConfirmationEmail(orderId: string) {
+  const order = await prismaClient.orders.findUnique({
+    where: { id: orderId },
+    include: {
+      events: true,
+      tickets: true,
+    },
+  });
+
+  if (!order) {
+    throw {
+      type: "NOT_FOUND",
+      message: "Order not found",
+    };
+  }
+
+  const ticketsWithCode = order.tickets.map((t) => ({
+    code: t.code,
+    name: t.name,
+  }));
+
+  const html = buildTicketEmailHtml(order.events.title, ticketsWithCode);
+
+  await sendTicketEmail({
+    to: order.tickets[0]?.email || "",
+    subject: `🎫 Confirmado: ${order.events.title}`,
+    html,
+  });
 }

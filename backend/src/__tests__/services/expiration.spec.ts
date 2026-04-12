@@ -20,7 +20,7 @@ vi.mock("../lib/prisma", () => ({
   },
 }));
 
-import { expireOrders, cancelOrder, getAvailableSpots } from "./expiration";
+import { expireOrders, cancelOrder, getAvailableSpots } from "../services/expiration";
 
 describe("expiration service", () => {
   beforeEach(() => {

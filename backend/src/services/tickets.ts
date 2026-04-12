@@ -112,7 +112,6 @@ export async function getTicketsByOrder(orderId: string) {
       code: true,
       name: true,
       email: true,
-      checked_in: true,
     },
   });
 
@@ -124,80 +123,4 @@ export async function getTicketsByOrder(orderId: string) {
   }
 
   return tickets;
-}
-
-export async function validateTicket(code: string) {
-  if (!code || code.trim() === "") {
-    throw {
-      type: "VALIDATION_ERROR",
-      message: "Ticket code is required",
-    };
-  }
-
-  const ticket = await prismaClient.tickets.findFirst({
-    where: { code: code.trim().toUpperCase() },
-    include: {
-      orders: {
-        select: { status: true },
-      },
-      events: {
-        select: { title: true, id: true },
-      },
-    },
-  });
-
-  if (!ticket) {
-    throw {
-      type: "NOT_FOUND",
-      message: "Invalid ticket",
-    };
-  }
-
-  if (ticket.checked_in) {
-    throw {
-      type: "BUSINESS_ERROR",
-      message: "Ticket already used",
-    };
-  }
-
-  return {
-    id: ticket.id,
-    code: ticket.code,
-    name: ticket.name,
-    eventId: ticket.event_id,
-    eventTitle: ticket.events.title,
-    checkedIn: ticket.checked_in,
-  };
-}
-
-export async function checkInTicket(code: string) {
-  if (!code || code.trim() === "") {
-    throw {
-      type: "VALIDATION_ERROR",
-      message: "Ticket code is required",
-    };
-  }
-
-  const ticket = await prismaClient.tickets.findFirst({
-    where: { code: code.trim().toUpperCase() },
-  });
-
-  if (!ticket) {
-    throw {
-      type: "NOT_FOUND",
-      message: "Ticket not found",
-    };
-  }
-
-  if (ticket.checked_in) {
-    throw {
-      type: "BUSINESS_ERROR",
-      message: "Ticket already checked in",
-    };
-  }
-
-  return await prismaClient.tickets.update({
-    where: { id: ticket.id },
-    data: { checked_in: true },
-  });
 }

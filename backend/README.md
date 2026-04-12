@@ -1,56 +1,108 @@
-# Serverless Backend Project
+# Vespera Tickets - Backend
 
-This project is a serverless backend application built using TypeScript. It is designed to handle various API requests and implement business logic through a modular structure.
+Sistema de venda de ingressos para eventos pequenos (~70 pessoas) com pagamentos Pix via Mercado Pago.
 
-## Project Structure
+## Quick Start
 
-```
-backend
-├── src
-│   ├── handlers
-│   │   └── index.ts        # Contains handler functions for processing requests
-│   ├── services
-│   │   └── index.ts        # Includes service logic and business rules
-│   └── types
-│       └── index.ts        # Defines TypeScript types and interfaces
-├── serverless.yml          # Configuration file for the serverless framework
-├── package.json             # npm configuration file with dependencies and scripts
-├── tsconfig.json           # TypeScript configuration file
-└── README.md               # Project documentation
+```bash
+cd backend
+npm install
+docker-compose up -d
+npx prisma migrate dev
+npm run dev
 ```
 
-## Setup Instructions
+## Endpoints
 
-1. **Clone the repository**:
-   ```
-   git clone <repository-url>
-   cd backend
-   ```
+| Método | Path | Descrição |
+|--------|------|------------|
+| POST | /events | Criar evento |
+| GET | /events | Listar eventos |
+| GET | /events/:id | Detalhes do evento |
+| PUT | /events/:id/lotes | Adicionar lotes |
+| POST | /orders | Criar pedido + pagamento Pix |
+| POST | /webhook | Confirmação de pagamento |
 
-2. **Install dependencies**:
-   ```
-   npm install
-   ```
+## Fluxo
 
-3. **Configure serverless**:
-   Update the `serverless.yml` file with your specific provider and function configurations.
+```
+1. Admin cria evento (via API ou banco)
+2. Admin adiciona lotes ao evento
+3. Usuário cria pedido → POST /orders
+   - Order com status PENDING
+   - Vagas reservadas no lote
+   - QR Code Pix gerado (expira em 10min)
+4. Usuário efetua pagamento Pix
+5. Mercado Pago envia webhook
+6. Sistema cria tickets + envía email
+7. CronJob expira pedidos não pagos (10min)
+```
 
-4. **Build the project**:
-   ```
-   npm run build
-   ```
+## Technical Decisions
 
-5. **Deploy the service**:
-   ```
-   serverless deploy
-   ```
+### Banco de Dados
+- PostgreSQL com Prisma ORM
+- Coluna `reserved` em lotes controla concorrência
+- Transações com `$transaction` para atomicidade
 
-## Usage Guidelines
+### Pagamentos
+- Mercado Pago com Pix
+- Webhook idempotente (confirma apenas orders PENDING)
+- QR Code expire em 10 minutos
 
-- The handler functions in `src/handlers/index.ts` are responsible for processing incoming requests.
-- Business logic and data manipulation should be implemented in `src/services/index.ts`.
-- Type definitions can be found in `src/types/index.ts` to ensure type safety across the project.
+### Lotes
+- Múltiplos lotes por evento
+- Venda sempre no lote mais antigo disponível (position)
+- Auto-avança para próximo lote quando lotado
 
-## Contributing
+### Tickets
+- Criados apenas após pagamento confirmado
+- Código único por ticket para entrada
 
-Contributions are welcome! Please submit a pull request or open an issue for any enhancements or bug fixes.
+### Cron Job (Expiração)
+- Função scheduled via serverless (rate: rate(10 minutes))
+- Executa `expireOrders()` a cada 10 minutos
+- Marca pedidos PENDING expirados como EXPIRED
+- Libera vagas reservadas nos lotes
+
+## Variáveis de Ambiente
+
+```env
+DATABASE_URL="postgresql://..."
+MERCADOPAGO_ACCESS_TOKEN="..."
+RESEND_API_KEY="..."
+RESEND_FROM_EMAIL="noreply@vespera.com"
+```
+
+## Deployment
+
+### Serverless (AWS Lambda)
+
+```bash
+serverless deploy
+```
+
+### Bare Metal (Laptop)
+
+Voir `documents/DEPLOY.md` para instruções detalhadas.
+
+## Estrutura
+
+```
+backend/
+├── src/
+│   ├── handlers/      # HTTP handlers
+│   ├── services/    # Business logic
+│   ├── lib/        # Prisma, config
+│   └── types/       # TypeScript types
+├── serverless.yml
+├── prisma/schema.prisma
+├── docker-compose.yml
+└── package.json
+```
+
+## Testes
+
+```bash
+npm test
+```

@@ -10,7 +10,7 @@ vi.mock("resend", () => ({
   })),
 }));
 
-import { sendTicketEmail, buildTicketEmailHtml, buildConfirmationEmailHtml } from "./email";
+import { sendTicketEmail, buildTicketEmailHtml, buildConfirmationEmailHtml } from "../services/email";
 
 describe("email service", () => {
   beforeEach(() => {

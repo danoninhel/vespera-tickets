@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { prismaClient } from "../lib/prisma";
-import { createOrder } from "./createOrder";
-import { createEventWithLotes } from "./events";
-import { expireOrders } from "./expiration";
+import { createOrder } from "../services/createOrder";
+import { createEventWithLotes } from "../services/events";
+import { expireOrders } from "../services/expiration";
 
 describe.skip("ticket flow - full", () => {
   let eventId: string;

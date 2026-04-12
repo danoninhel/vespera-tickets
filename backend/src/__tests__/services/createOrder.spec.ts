@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { prismaClient } from "../lib/prisma";
-import { createOrder } from "./createOrder";
+import { createOrder } from "../services/createOrder";
 
 describe("createOrder", () => {
   const EVENT_ID = "11111111-1111-1111-1111-111111111111";
