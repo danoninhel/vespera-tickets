@@ -121,3 +121,57 @@ export async function getAllLotes(eventId: string) {
     orderBy: { position: "asc" },
   });
 }
+
+export async function addLotesToEvent(eventId: string, lotes: CreateLoteInput[]) {
+  if (!lotes?.length) throw new Error("lotes is required");
+
+  for (const lote of lotes) {
+    if (!lote.name?.trim()) throw new Error("lote name is required");
+    if (lote.price <= 0) throw new Error("lote price must be positive");
+    if (lote.total <= 0) throw new Error("lote total must be positive");
+  }
+
+  const event = await prismaClient.events.findUnique({
+    where: { id: eventId },
+  });
+
+  if (!event) throw new Error("Event not found");
+
+  const existingLotes = await prismaClient.lotes.findMany({
+    where: { event_id: eventId },
+  });
+
+  const totalLoteCapacity = lotes.reduce((sum, l) => sum + l.total, 0);
+  const existingCapacity = existingLotes.reduce((sum, l) => sum + l.total, 0);
+  
+  if (totalLoteCapacity + existingCapacity !== event.capacity) {
+    throw new Error(`Total lote capacity must equal event capacity (${event.capacity})`);
+  }
+
+  const sortedLotes = [...lotes].sort((a, b) => b.price - a.price);
+
+  for (let i = 0; i < sortedLotes.length; i++) {
+    await prismaClient.lotes.create({
+      data: {
+        event_id: eventId,
+        name: sortedLotes[i].name,
+        price: sortedLotes[i].price,
+        total: sortedLotes[i].total,
+        position: existingLotes.length + i + 1,
+        reserved: 0,
+      },
+    });
+  }
+
+  return getEventById(eventId);
+}
+
+export async function getAllEvents() {
+  return prismaClient.events.findMany({
+    orderBy: { created_at: "desc" },
+    include: {
+      lotes: { orderBy: { position: "asc" } },
+      event_artists: { include: { artists: true } },
+    },
+  });
+}

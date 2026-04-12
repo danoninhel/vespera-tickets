@@ -21,18 +21,32 @@ functions:
           method: get
 
   getEvents:
-    handler: src/handlers/index.getEvents
+    handler: src/handlers/events.getEvents
     events:
       - http:
           path: events
           method: get
 
-  health:
-    handler: src/handlers/index.healthCheck
+  getEvent:
+    handler: src/handlers/events.getEvent
     events:
       - http:
-          path: health
+          path: events/{id}
           method: get
+
+  createEvent:
+    handler: src/handlers/events.createEvent
+    events:
+      - http:
+          path: events
+          method: post
+
+  addLotes:
+    handler: src/handlers/events.addLotes
+    events:
+      - http:
+          path: events/{id}/lotes
+          method: put
 
   createOrder:
     handler: src/handlers/orders.default
