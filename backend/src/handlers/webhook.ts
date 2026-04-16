@@ -1,166 +1,75 @@
-import { prismaClient } from "../lib/prisma";
-import { getPaymentStatus } from "../services/payment";
-import { createTickets } from "../services/tickets";
-import { sendTicketEmail, buildTicketEmailHtml, sendOrderConfirmationEmail } from "../services/email";
+import { ApiHandlerResult } from "../types/api";
+import { PaymentGatewayFactory } from "../services/payment";
+import { orderRepository } from "../repositories/orderRepository";
+import { eventRepository } from "../repositories/eventRepository";
+import { ticketRepository } from "../repositories/ticketRepository";
 
-type WebhookRequest = {
-  headers: Record<string, string>;
-  body: string;
-};
+interface WebhookInput {
+  type?: string;
+  topic?: string;
+  data?: {
+    id: string | number;
+  };
+}
 
-type WebhookResponse = {
-  statusCode: number;
-  body: string;
-};
-
-export default async function handler(req: any): Promise<WebhookResponse> {
-  if (req.method !== "POST") {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({ error: { type: "METHOD_NOT_ALLOWED", message: "Only POST" } }),
-    };
-  }
-
+export async function webhook(input: WebhookInput): Promise<ApiHandlerResult> {
   try {
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const topic = body.data?.object || body.topic || body.type;
-
+    const topic = input.topic || input.type;
+    
     if (topic !== "payment") {
-      return { statusCode: 200, body: JSON.stringify({ message: "Ignored topic" }) };
+      return { statusCode: 200, data: { processed: false, message: topic ? "Ignored topic" : "Not a payment webhook" } };
     }
 
-    const paymentId = body.data?.id?.toString();
+    const paymentId = input.data?.id;
     if (!paymentId) {
-      return { statusCode: 400, body: JSON.stringify({ error: { type: "VALIDATION_ERROR", message: "payment id required" } }) };
+      return { statusCode: 400, error: { type: "VALIDATION_ERROR", message: "payment id required" } };
     }
 
-    console.log("Processing webhook for payment:", paymentId);
+    const paymentGateway = PaymentGatewayFactory.create();
+    const paymentStatus = await paymentGateway.getPaymentStatus(String(paymentId));
 
-    const [order] = await prismaClient.$queryRaw<{ id: string; ticket_quantity: number; status: string }[]>`
-      SELECT id, ticket_quantity, status 
-      FROM orders 
-      WHERE status = 'PENDING' 
-      AND expires_at > NOW()
-      LIMIT 1
-    `;
+    if (paymentStatus.status !== "approved" && paymentStatus.status !== "accepted") {
+      return { statusCode: 200, data: { processed: false, message: "Payment not approved" } };
+    }
 
+    const order = await orderRepository.findByPaymentId(String(paymentId));
+    
     if (!order) {
-      console.log("No pending order found");
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ received: true, orderUpdated: false }),
-      };
+      return { statusCode: 404, error: { type: "NOT_FOUND", message: "Order not found for payment" } };
     }
 
-    const status = await getPaymentStatus(paymentId);
+    if (order.status === "PAID") {
+      return { statusCode: 200, data: { processed: true, orderId: order.id, message: "Already processed" } };
+    }
 
-    if (status === "approved" || status === "accredited") {
-      await prismaClient.orders.update({
-        where: { id: order.id },
-        data: { status: "PAID" },
-      });
+    const event = await eventRepository.findById(order.event_id);
+    if (!event) {
+      return { statusCode: 404, error: { type: "NOT_FOUND", message: "Event not found" } };
+    }
 
-      console.log("Order paid:", order.id);
+    await orderRepository.updateStatus(order.id, "PAID");
 
-      const [ticketQuantities] = await prismaClient.$queryRaw<{ quantity: number }[]>`
-        SELECT COUNT(*) as quantity FROM tickets WHERE order_id = ${order.id}
-      `;
-
-      const neededTickets = order.ticket_quantity - (ticketQuantities?.quantity || 0);
-
-      if (neededTickets > 0) {
-        await createTicketsBatch(order.id, neededTickets);
+    const tickets = await ticketRepository.findByOrderId(order.id);
+    if (tickets.length === 0) {
+      const ticketInputs: { name: string; email: string }[] = [];
+      for (let i = 0; i < order.ticket_quantity; i++) {
+        ticketInputs.push({ name: `Attendee ${i + 1}`, email: "attendee@example.com" });
       }
-
-      await sendOrderConfirmationEmail(order.id);
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          received: true,
-          paymentId,
-          orderId: order.id,
-          ticketsCreated: true,
-          emailSent: true,
-        }),
-      };
+      await ticketRepository.createForOrder(order.id, order.event_id, ticketInputs);
     }
 
-    if (status === "rejected" || status === "cancelled" || status === "refunded") {
-      await prismaClient.orders.update({
-        where: { id: order.id },
-        data: { status: "CANCELLED" },
-      });
-
-      await prismaClient.$queryRaw`
-        UPDATE lotes SET reserved = reserved - ${order.ticket_quantity}
-        WHERE event_id = (SELECT event_id FROM orders WHERE id = ${order.id})
-      `;
-
-      console.log("Order cancelled:", order.id);
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          received: true,
-          paymentId,
-          orderId: order.id,
-          orderUpdated: true,
-        }),
-      };
-    }
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ received: true, paymentId }),
+    return { 
+      statusCode: 200, 
+      data: { 
+        processed: true, 
+        orderId: order.id,
+        message: "Order confirmed",
+        received: true,
+      },
     };
 
   } catch (error: any) {
-    console.error("webhook_error", error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: { type: "INTERNAL_ERROR", message: error.message } }),
-    };
-  }
-}
-
-async function createTicketsBatch(orderId: string, count: number) {
-  const orders = await prismaClient.$queryRaw<{ event_title: string }[]>`
-    SELECT e.title as event_title 
-    FROM orders o 
-    JOIN events e ON e.id = o.event_id 
-    WHERE o.id = ${orderId}
-  `;
-
-  const eventTitle = orders[0]?.event_title || "Evento";
-  const tickets = [];
-
-  for (let i = 0; i < count; i++) {
-    tickets.push({
-      orderId,
-      name: `Participante ${i + 1}`,
-      email: "cliente@email.com",
-    });
-  }
-
-  await createTickets({
-    orderId,
-    tickets,
-  });
-
-  const createdTickets = await prismaClient.tickets.findMany({
-    where: { order_id: orderId },
-    select: { code: true, name: true },
-  });
-
-  try {
-    await sendTicketEmail({
-      to: "cliente@email.com",
-      subject: `🎫 Seus Ingressos - ${eventTitle}`,
-      html: buildTicketEmailHtml(eventTitle, createdTickets),
-    });
-    console.log("Confirmation email sent for order:", orderId);
-  } catch (emailErr) {
-    console.error("Failed to send confirmation email:", emailErr);
+    console.error("Webhook error:", error);
+    return { statusCode: 500, error: { type: "INTERNAL_ERROR", message: error.message } };
   }
 }

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { prismaClient } from "../lib/prisma";
-import { createOrder } from "../services/createOrder";
-import { createEventWithLotes } from "../services/events";
-import { expireOrders } from "../services/expiration";
+import { prismaClient } from "@lib/prisma";
+import { orderService } from "@services/order/create";
+import { eventService } from "@services/event/create";
+import { expirationService } from "@services/order/expiration";
 
 describe.skip("ticket flow - full", () => {
   let eventId: string;
@@ -15,7 +15,7 @@ describe.skip("ticket flow - full", () => {
     await prismaClient.events.deleteMany();
     await prismaClient.artists.deleteMany();
 
-    const event = await createEventWithLotes({
+    const event = await eventService.create({
       title: "Rock Festival",
       description: "Test",
       image_url: "https://x.com/x.jpg",
@@ -46,7 +46,7 @@ describe.skip("ticket flow - full", () => {
 
   it("sells all tickets, uses expensive first", async () => {
     for (let i = 0; i < 10; i++) {
-      await createOrder({
+      await orderService.createOrder({
         eventId,
         tickets: [{ name: `P${i}`, email: `p${i}@t.com` }],
       });
@@ -59,7 +59,7 @@ describe.skip("ticket flow - full", () => {
 
   it("falls to cheap after expensive sold", async () => {
     for (let i = 0; i < 5; i++) {
-      await createOrder({ eventId, tickets: [{ name: `P${i}`, email: `p${i}@t.com` }] });
+      await orderService.createOrder({ eventId, tickets: [{ name: `P${i}`, email: `p${i}@t.com` }] });
     }
     const lotes = await prismaClient.lotes.findMany({ orderBy: { position: "asc" } });
     expect(lotes[0].reserved).toBe(5);
@@ -68,11 +68,11 @@ describe.skip("ticket flow - full", () => {
 
   it("fails when all sold out", async () => {
     for (let i = 0; i < 10; i++) {
-      try { await createOrder({ eventId, tickets: [{ name: `P${i}`, email: `p${i}@t.com` }] }); }
+      try { await orderService.createOrder({ eventId, tickets: [{ name: `P${i}`, email: `p${i}@t.com` }] }); }
       catch (e) {}
     }
     await expect(
-      createOrder({ eventId, tickets: [{ name: "Late", email: "late@t.com" }] })
+      orderService.createOrder({ eventId, tickets: [{ name: "Late", email: "late@t.com" }] })
     ).rejects.toMatchObject({ type: "BUSINESS_ERROR" });
   }, 15000);
 });
@@ -88,11 +88,12 @@ describe("expiration", () => {
     await prismaClient.events.deleteMany();
     await prismaClient.artists.deleteMany();
 
-    const event = await createEventWithLotes({
+    const event = await eventService.create({
       title: "Quick",
       description: "Test",
       image_url: "https://x.com/x.jpg",
       capacity: 5,
+      artists: ["Test Artist"],
       lotes: [{ name: "L", price: 5000, total: 5 }],
     });
     eventId = event.id;
@@ -108,11 +109,11 @@ describe("expiration", () => {
   });
 
   it("expires order and releases spots", async () => {
-    const order = await createOrder({ eventId, tickets: [{ name: "B", email: "b@t.com" }] });
+    const order = await orderService.createOrder({ eventId, tickets: [{ name: "B", email: "b@t.com" }] });
     
     await prismaClient.$executeRaw`UPDATE orders SET expires_at = NOW() - '1 min'::interval WHERE id = ${order.orderId}`;
     
-    const result = await expireOrders();
+    const result = await expirationService.expireOrders();
     expect(result.expiredOrders).toBe(1);
     expect(result.releasedSpots).toBe(1);
 
@@ -121,19 +122,19 @@ describe("expiration", () => {
   });
 
   it("releases spots to be re-bought", async () => {
-    const order = await createOrder({ eventId, tickets: [{ name: "B", email: "b@t.com" }] });
+    const order = await orderService.createOrder({ eventId, tickets: [{ name: "B", email: "b@t.com" }] });
     await prismaClient.$executeRaw`UPDATE orders SET expires_at = NOW() - '1 min'::interval WHERE id = ${order.orderId}`;
-    await expireOrders();
+    await expirationService.expireOrders();
 
-    await createOrder({ eventId, tickets: [{ name: "B2", email: "b2@t.com" }] });
+    await orderService.createOrder({ eventId, tickets: [{ name: "B2", email: "b2@t.com" }] });
   });
 
   it("paid orders do not expire", async () => {
-    const order = await createOrder({ eventId, tickets: [{ name: "B", email: "b@t.com" }] });
+    const order = await orderService.createOrder({ eventId, tickets: [{ name: "B", email: "b@t.com" }] });
     await prismaClient.orders.update({ where: { id: order.orderId }, data: { status: "PAID" } });
     await prismaClient.$executeRaw`UPDATE orders SET expires_at = NOW() - '1 min'::interval WHERE id = ${order.orderId}`;
     
-    const result = await expireOrders();
+    const result = await expirationService.expireOrders();
     expect(result.expiredOrders).toBe(0);
   });
 });

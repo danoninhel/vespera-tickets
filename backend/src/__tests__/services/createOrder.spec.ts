@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { prismaClient } from "../lib/prisma";
-import { createOrder } from "../services/createOrder";
+import { prismaClient } from "@lib/prisma";
+import { orderService } from "@services/order/create";
 
 describe("createOrder", () => {
   const EVENT_ID = "11111111-1111-1111-1111-111111111111";
@@ -38,25 +38,25 @@ describe("createOrder", () => {
   });
 
   it("creates order with valid tickets", async () => {
-    const result = await createOrder({ eventId: EVENT_ID, tickets: [{ name: "John", email: "j@j.com" }] });
+    const result = await orderService.createOrder({ eventId: EVENT_ID, tickets: [{ name: "John", email: "j@j.com" }] });
     expect(result.orderId).toBeDefined();
     expect(result.ticketQuantity).toBe(1);
   });
 
   it("throws NOT_FOUND for missing event", async () => {
-    await expect(createOrder({ eventId: "00000000-0000-0000-0000-000000000000", tickets: [{ name: "J", email: "j@j.com" }] }))
+    await expect(orderService.createOrder({ eventId: "00000000-0000-0000-0000-000000000000", tickets: [{ name: "J", email: "j@j.com" }] }))
       .rejects.toMatchObject({ type: "NOT_FOUND", message: "Event not found" });
   }, 10000);
 
   it("throws BUSINESS_ERROR when empty tickets", async () => {
-    await expect(createOrder({ eventId: EVENT_ID, tickets: [] }))
+    await expect(orderService.createOrder({ eventId: EVENT_ID, tickets: [] }))
       .rejects.toMatchObject({ type: "BUSINESS_ERROR", message: "At least one ticket is required" });
   });
 
   it("throws when all lotes exhausted", async () => {
     await prismaClient.lotes.update({ where: { id: LOTE1_ID }, data: { reserved: 2 } });
     await prismaClient.lotes.update({ where: { id: LOTE2_ID }, data: { reserved: 1 } });
-    await expect(createOrder({ eventId: EVENT_ID, tickets: [{ name: "J", email: "j@j.com" }] }))
-      .rejects.toMatchObject({ type: "BUSINESS_ERROR", message: "No lote available" });
+    await expect(orderService.createOrder({ eventId: EVENT_ID, tickets: [{ name: "J", email: "j@j.com" }] }))
+      .rejects.toMatchObject({ type: "BUSINESS_ERROR", message: "No tickets available" });
   });
 });

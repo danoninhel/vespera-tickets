@@ -1,73 +1,72 @@
-import { prismaClient } from "../lib/prisma";
-import { createEventWithLotes, addLotesToEvent, getEventById, getAllEvents } from "../services/events";
+import { ApiHandlerResult } from "../types/api";
+import { eventService } from "../services/event/create";
+import { eventListService } from "../services/event/list";
+import { createEventValidator } from "../validators/createEvent";
 
-type CreateEventRequest = {
-  title: string;
-  description: string;
-  image_url: string;
-  capacity: number;
+interface EventParams {
+  id?: string;
+}
+
+interface EventBody {
+  title?: string;
+  description?: string;
+  image_url?: string;
+  capacity?: number;
+  metadata?: Record<string, unknown>;
   artists?: string[];
-  lotes?: {
-    name: string;
-    price: number;
-    total: number;
-  }[];
-};
+}
 
-export const getEvents = async () => {
+export async function getEvents(): Promise<ApiHandlerResult> {
   try {
-    const events = await getAllEvents();
+    const events = await eventListService.findAll();
     
-    return {
-      statusCode: 200,
-      body: JSON.stringify(events.map(e => ({
-        id: e.id,
-        title: e.title,
-        description: e.description,
-        image_url: e.image_url,
-        capacity: e.capacity,
-        created_at: e.created_at?.toISOString(),
-        artists: e.event_artists.map(a => a.artists.name),
-        lotes: e.lotes.map(l => ({
-          id: l.id,
-          name: l.name,
-          price: l.price,
-          total: l.total,
-          reserved: l.reserved,
-          available: l.total - l.reserved,
-        })),
-      }))),
-    };
-  } catch (error: any) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Erro ao buscar eventos", details: error.message }),
-    };
-  }
-};
+    const response = events.map(e => ({
+      id: e.id,
+      title: e.title,
+      description: e.description,
+      image_url: e.image_url,
+      capacity: e.capacity,
+      created_at: e.created_at?.toISOString(),
+      lotes: e.lotes.map((l: any) => ({
+        id: l.id,
+        name: l.name,
+        price: l.price,
+        total: l.total,
+        reserved: l.reserved,
+        available: l.total - l.reserved,
+      })),
+    }));
 
-export const getEvent = async (eventId: string) => {
+    return { statusCode: 200, data: { events: response } };
+  } catch (error: any) {
+    return { statusCode: 500, error: { type: "INTERNAL_ERROR", message: error.message } };
+  }
+}
+
+export async function getEvent(params: EventParams): Promise<ApiHandlerResult> {
   try {
-    const event = await getEventById(eventId);
+    const eventId = params.id;
+    
+    if (!eventId) {
+      return { statusCode: 400, error: { type: "VALIDATION_ERROR", message: "event_id is required" } };
+    }
+    
+    const event = await eventListService.findById(eventId);
     
     if (!event) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ error: "Evento não encontrado" }),
-      };
+      return { statusCode: 404, error: { type: "NOT_FOUND", message: "Event not found" } };
     }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({
+      data: {
         id: event.id,
         title: event.title,
         description: event.description,
         image_url: event.image_url,
         capacity: event.capacity,
         created_at: event.created_at?.toISOString(),
-        artists: event.event_artists.map(a => a.artists.name),
-        lotes: event.lotes.map(l => ({
+        lotes: event.lotes.map((l: any) => ({
           id: l.id,
           name: l.name,
           price: l.price,
@@ -75,124 +74,25 @@ export const getEvent = async (eventId: string) => {
           reserved: l.reserved,
           available: l.total - l.reserved,
         })),
-      }),
+      },
     };
   } catch (error: any) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Erro ao buscar evento", details: error.message }),
-    };
+    return { statusCode: 500, error: { type: "INTERNAL_ERROR", message: error.message } };
   }
-};
+}
 
-export const createEvent = async (req: any) => {
+export async function createEvent(body: EventBody): Promise<ApiHandlerResult> {
   try {
-    const body: CreateEventRequest = req.body;
-
-    if (!body?.title) {
-      return { statusCode: 400, body: JSON.stringify({ error: "title é obrigatório" }) };
-    }
-    if (!body?.description) {
-      return { statusCode: 400, body: JSON.stringify({ error: "description é obrigatório" }) };
-    }
-    if (!body?.image_url) {
-      return { statusCode: 400, body: JSON.stringify({ error: "image_url é obrigatório" }) };
-    }
-    if (!body?.capacity || body.capacity <= 0) {
-      return { statusCode: 400, body: JSON.stringify({ error: "capacity deve ser maior que 0" }) };
+    const validation = createEventValidator.validate(body);
+    if (!validation.valid) {
+      return { statusCode: 400, error: { type: "VALIDATION_ERROR", message: validation.errors.join(", ") } };
     }
 
-    const hasLotes = body.lotes && body.lotes.length > 0;
+    const event = await eventService.create(validation.data!);
 
-    let event;
-    
-    if (hasLotes) {
-      event = await createEventWithLotes({
-        title: body.title,
-        description: body.description,
-        image_url: body.image_url,
-        capacity: body.capacity,
-        artists: body.artists || [],
-        lotes: body.lotes!,
-      });
-    } else {
-      event = await prismaClient.events.create({
-        data: {
-          title: body.title,
-          description: body.description,
-          image_url: body.image_url,
-          capacity: body.capacity,
-        },
-      });
-
-      if (body.artists?.length) {
-        for (const artistName of body.artists) {
-          let artist = await prismaClient.artists.findFirst({
-            where: { name: { equals: artistName, mode: "insensitive" } },
-          });
-          
-          if (!artist) {
-            artist = await prismaClient.artists.create({ data: { name: artistName } });
-          }
-
-          await prismaClient.event_artists.create({
-            data: { event_id: event.id, artist_id: artist.id },
-          });
-        }
-      }
-    }
-
-    return {
-      statusCode: 201,
-      body: JSON.stringify({ id: event.id, title: event.title }),
-    };
-
+    return { statusCode: 201, data: { id: event.id, title: event.title } };
   } catch (error: any) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Erro ao criar evento", details: error.message }),
-    };
+    const statusCode = error.type === "VALIDATION_ERROR" ? 400 : 500;
+    return { statusCode, error: { type: error.type || "INTERNAL_ERROR", message: error.message } };
   }
-};
-
-export const addLotes = async (eventId: string, req: any) => {
-  try {
-    const body = req.body;
-
-    if (!body?.lotes || !Array.isArray(body.lotes) || body.lotes.length === 0) {
-      return { statusCode: 400, body: JSON.stringify({ error: "lotes é obrigatório" }) };
-    }
-
-    for (const lote of body.lotes) {
-      if (!lote.name) {
-        return { statusCode: 400, body: JSON.stringify({ error: "lote name é obrigatório" }) };
-      }
-      if (!lote.price || lote.price <= 0) {
-        return { statusCode: 400, body: JSON.stringify({ error: "lote price deve ser maior que 0" }) };
-      }
-      if (!lote.total || lote.total <= 0) {
-        return { statusCode: 400, body: JSON.stringify({ error: "lote total deve ser maior que 0" }) };
-      }
-    }
-
-    const event = await addLotesToEvent(eventId, body.lotes);
-
-    if (!event) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ error: "Event not found" }),
-      };
-    }
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ id: event.id, title: event.title, lotes: event.lotes }),
-    };
-
-  } catch (error: any) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Erro ao adicionar lotes", details: error.message }),
-    };
-  }
-};
+}

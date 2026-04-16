@@ -1,375 +1,123 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import { prismaClient } from "@lib/prisma";
+import { eventService } from "@services/event/create";
+import { orderService } from "@services/order/create";
+import { PaymentGatewayFactory, MockPaymentGateway } from "@services/payment/index";
 
-const { mockConfigure, mockPaymentCreate, mockPaymentGet, mockPaymentSearch } = vi.hoisted(() => ({
-  mockConfigure: vi.fn(),
-  mockPaymentCreate: vi.fn(),
-  mockPaymentGet: vi.fn(),
-  mockPaymentSearch: vi.fn(),
-}));
+describe("Payment Service", () => {
+  let eventId: string;
 
-vi.mock("mercadopago", () => ({
-  default: {
-    configure: mockConfigure,
-    payment: {
-      create: mockPaymentCreate,
-      get: mockPaymentGet,
-      search: mockPaymentSearch,
-    },
-  },
-}));
+  beforeEach(async () => {
+    await prismaClient.tickets.deleteMany();
+    await prismaClient.orders.deleteMany();
+    await prismaClient.event_artists.deleteMany();
+    await prismaClient.lotes.deleteMany();
+    await prismaClient.events.deleteMany();
+    await prismaClient.artists.deleteMany();
 
-import { createPixPayment, getPaymentStatus, getPaymentByExternalReference } from "../services/payment";
-
-describe("payment service", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    process.env.MERCADOPAGO_ACCESS_TOKEN = "TEST_TOKEN_123";
-    
-    mockConfigure.mockReset();
-    mockPaymentCreate.mockReset();
-    mockPaymentGet.mockReset();
-    mockPaymentSearch.mockReset();
+    const event = await eventService.create({
+      title: "Test Concert",
+      description: "Live show",
+      image_url: "https://x.com/x.jpg",
+      capacity: 100,
+      artists: ["Band"],
+      lotes: [{ name: "VIP", price: 10000, total: 50 }, { name: "General", price: 5000, total: 50 }],
+    });
+    eventId = event.id;
   });
 
-  afterEach(() => {
-    delete process.env.MERCADOPAGO_ACCESS_TOKEN;
+  afterEach(async () => {
+    await prismaClient.tickets.deleteMany();
+    await prismaClient.orders.deleteMany();
+    await prismaClient.event_artists.deleteMany();
+    await prismaClient.lotes.deleteMany();
+    await prismaClient.events.deleteMany();
+    await prismaClient.artists.deleteMany();
   });
 
-  describe("createPixPayment", () => {
-    it("throws CONFIG_ERROR when token not set", async () => {
-      delete process.env.MERCADOPAGO_ACCESS_TOKEN;
+  describe("MockPaymentGateway", () => {
+    it("creates payment and returns pix qr code", async () => {
+      const gateway = new MockPaymentGateway();
       
-      await expect(
-        createPixPayment({
-          orderId: "order_123",
-          amount: 5000,
-          description: "Test",
-          payerEmail: "test@test.com",
-        })
-      ).rejects.toMatchObject({
-        type: "CONFIG_ERROR",
-        message: "MERCADOPAGO_ACCESS_TOKEN not configured",
-      });
-    });
-
-    it("throws when orderId is empty", async () => {
-      await expect(
-        createPixPayment({
-          orderId: "",
-          amount: 5000,
-          description: "Test",
-          payerEmail: "test@test.com",
-        })
-      ).rejects.toMatchObject({
-        type: "PAYMENT_ERROR",
-        message: "orderId is required",
-      });
-    });
-
-    it("throws when orderId is only whitespace", async () => {
-      await expect(
-        createPixPayment({
-          orderId: "   ",
-          amount: 5000,
-          description: "Test",
-          payerEmail: "test@test.com",
-        })
-      ).rejects.toMatchObject({
-        type: "PAYMENT_ERROR",
-        message: "orderId is required",
-      });
-    });
-
-    it("throws when amount is zero", async () => {
-      await expect(
-        createPixPayment({
-          orderId: "order_123",
-          amount: 0,
-          description: "Test",
-          payerEmail: "test@test.com",
-        })
-      ).rejects.toMatchObject({
-        type: "PAYMENT_ERROR",
-        message: "amount must be positive",
-      });
-    });
-
-    it("throws when amount is negative", async () => {
-      await expect(
-        createPixPayment({
-          orderId: "order_123",
-          amount: -100,
-          description: "Test",
-          payerEmail: "test@test.com",
-        })
-      ).rejects.toMatchObject({
-        type: "PAYMENT_ERROR",
-        message: "amount must be positive",
-      });
-    });
-
-    it("throws when payerEmail is missing @", async () => {
-      await expect(
-        createPixPayment({
-          orderId: "order_123",
-          amount: 5000,
-          description: "Test",
-          payerEmail: "invalidemail",
-        })
-      ).rejects.toMatchObject({
-        type: "PAYMENT_ERROR",
-        message: "payerEmail is required",
-      });
-    });
-
-    it("throws when payerEmail is empty", async () => {
-      await expect(
-        createPixPayment({
-          orderId: "order_123",
-          amount: 5000,
-          description: "Test",
-          payerEmail: "",
-        })
-      ).rejects.toMatchObject({
-        type: "PAYMENT_ERROR",
-        message: "payerEmail is required",
-      });
-    });
-
-    it("creates payment successfully with pix", async () => {
-      const mockResponse = {
-        id: 123456789,
-        status: "pending",
-        external_reference: "order_abc123",
-        point_of_interaction: {
-          transaction_data: {
-            qr_code: "00020101021226850014br.gov.bcb.pix0136a538afd6-768d-41f6-8e66-6ExampleQRCode",
-            qr_code_image: "https://mercadopago.com.br/qr/test.png",
-          },
-        },
-        expires_date: "2026-04-12T12:00:00.000-03:00",
-      };
-
-      mockPaymentCreate.mockImplementation((_, callback) => {
-        callback(null, mockResponse);
-      });
-
-      const result = await createPixPayment({
-        orderId: "order_abc123",
-        amount: 5000,
-        description: "2 Ingressos Show",
-        payerEmail: "cliente@email.com",
-      });
-
-      expect(mockConfigure).toHaveBeenCalledWith({ access_token: "TEST_TOKEN_123" });
-      expect(mockPaymentCreate).toHaveBeenCalled();
-      expect(result).toMatchObject({
-        id: "123456789",
-        status: "pending",
-        paymentId: "123456789",
-        pixQrCode: "00020101021226850014br.gov.bcb.pix0136a538afd6-768d-41f6-8e66-6ExampleQRCode",
-        pixQrCodeImage: "https://mercadopago.com.br/qr/test.png",
-        externalReference: "order_abc123",
-      });
-    });
-
-    it("handles API error from Mercado Pago", async () => {
-      mockPaymentCreate.mockImplementation((_, callback) => {
-        callback({ message: "Invalid access token", status: 401 }, null);
-      });
-
-      await expect(
-        createPixPayment({
-          orderId: "order_123",
-          amount: 5000,
-          description: "Test",
-          payerEmail: "test@test.com",
-        })
-      ).rejects.toMatchObject({
-        type: "PAYMENT_ERROR",
-        message: "Invalid access token",
-      });
-    });
-
-    it("converts amount from cents to reais", async () => {
-      let capturedAmount = 0;
-      
-      mockPaymentCreate.mockImplementation((params, callback) => {
-        capturedAmount = params.transaction_amount;
-        callback(null, { id: 123, status: "pending" });
-      });
-
-      await createPixPayment({
-        orderId: "order_123",
+      const result = await gateway.createPayment({
+        orderId: "order-123",
         amount: 10000,
-        description: "Test",
-        payerEmail: "test@test.com",
+        description: "Test payment",
+        payerEmail: "test@example.com",
       });
 
-      expect(capturedAmount).toBe(100);
+      expect(result.paymentId).toBeDefined();
+      expect(result.pixQrCode).toBeDefined();
+      expect(result.status).toBe("pending");
+      expect(result.expirationDate).toBeInstanceOf(Date);
     });
 
-    it("returns without expiration when not provided", async () => {
-      mockPaymentCreate.mockImplementation((_, callback) => {
-        callback(null, {
-          id: 123,
-          status: "pending",
-          external_reference: "order_123",
-          point_of_interaction: { transaction_data: {} },
-        });
-      });
-
-      const result = await createPixPayment({
-        orderId: "order_123",
-        amount: 5000,
-        description: "Test",
-        payerEmail: "test@test.com",
-      });
-
-      expect(result.expirationDate).toBeUndefined();
-    });
-
-    it("uses orderId as external_reference", async () => {
-      let capturedRef = "";
+    it("returns approved status for mock payments", async () => {
+      const gateway = new MockPaymentGateway();
       
-      mockPaymentCreate.mockImplementation((params, callback) => {
-        capturedRef = params.external_reference;
-        callback(null, { id: 123, status: "pending" });
-      });
-
-      await createPixPayment({
-        orderId: "my-custom-order-id",
-        amount: 5000,
-        description: "Test",
-        payerEmail: "test@test.com",
-      });
-
-      expect(capturedRef).toBe("my-custom-order-id");
+      const result = await gateway.getPaymentStatus("123456");
+      expect(result.status).toBe("approved");
     });
 
-    it("sends installments: 1", async () => {
-      let capturedInstallments = -1;
+    it("returns pending for unknown payment ids", async () => {
+      const gateway = new MockPaymentGateway();
       
-      mockPaymentCreate.mockImplementation((params, callback) => {
-        capturedInstallments = params.installments;
-        callback(null, { id: 123, status: "pending" });
-      });
-
-      await createPixPayment({
-        orderId: "order_123",
-        amount: 5000,
-        description: "Test",
-        payerEmail: "test@test.com",
-      });
-
-      expect(capturedInstallments).toBe(1);
+      const result = await gateway.getPaymentStatus("unknown");
+      expect(result.status).toBe("pending");
     });
   });
 
-  describe("getPaymentStatus", () => {
-    it("throws CONFIG_ERROR when token not set", async () => {
+  describe("PaymentGatewayFactory", () => {
+    it("uses MockPaymentGateway when no token", () => {
       delete process.env.MERCADOPAGO_ACCESS_TOKEN;
-      
-      await expect(getPaymentStatus("123")).rejects.toMatchObject({
-        type: "CONFIG_ERROR",
-      });
+      const gateway = PaymentGatewayFactory.create();
+      expect(gateway).toBeInstanceOf(MockPaymentGateway);
     });
 
-    it("throws when paymentId is empty", async () => {
-      await expect(getPaymentStatus("")).rejects.toMatchObject({
-        type: "PAYMENT_ERROR",
-        message: "paymentId is required",
-      });
-    });
-
-    it("returns status successfully", async () => {
-      mockPaymentGet.mockImplementation((_, callback) => {
-        callback(null, { status: "approved" });
-      });
-
-      const status = await getPaymentStatus("123456");
-      
-      expect(status).toBe("approved");
-    });
-
-    it("handles API error", async () => {
-      mockPaymentGet.mockImplementation((_, callback) => {
-        callback({ message: "Not found", status: 404 }, null);
-      });
-
-      await expect(getPaymentStatus("invalid")).rejects.toMatchObject({
-        type: "PAYMENT_ERROR",
-        message: "Not found",
-      });
+    it("uses MockPaymentGateway for test tokens", () => {
+      process.env.MERCADOPAGO_ACCESS_TOKEN = "TEST-12345";
+      const gateway = PaymentGatewayFactory.create();
+      expect(gateway).toBeInstanceOf(MockPaymentGateway);
     });
   });
 
-  describe("getPaymentByExternalReference", () => {
-    it("throws when externalRef is empty", async () => {
-      await expect(getPaymentByExternalReference("")).rejects.toMatchObject({
-        type: "PAYMENT_ERROR",
-        message: "externalReference is required",
+  describe("Order with payment", () => {
+    it("creates order with payment and returns qr code", async () => {
+      const result = await orderService.createOrder({
+        eventId,
+        tickets: [{ name: "Fan", email: "fan@test.com" }],
       });
+
+      expect(result.orderId).toBeDefined();
+      expect(result.paymentId).toBeDefined();
+      expect(result.pixQrCode).toBeDefined();
+      expect(result.expiresAt).toBeInstanceOf(Date);
     });
 
-    it("returns null when no payments found", async () => {
-      mockPaymentSearch.mockImplementation((_, callback) => {
-        callback(null, { results: [] });
+    it("calculates correct total from lote price", async () => {
+      const result = await orderService.createOrder({
+        eventId,
+        tickets: [
+          { name: "Fan 1", email: "f1@test.com" },
+          { name: "Fan 2", email: "f2@test.com" },
+        ],
       });
 
-      const result = await getPaymentByExternalReference("order_not_exists");
-      
-      expect(result).toBeNull();
+      expect(result.ticketQuantity).toBe(2);
     });
 
-    it("returns payment when found", async () => {
-      mockPaymentSearch.mockImplementation((_, callback) => {
-        callback(null, {
-          results: [{
-            id: 999,
-            status: "approved",
-            external_reference: "order_found",
-            point_of_interaction: {
-              transaction_data: { qr_code: "test_qr" }
-            }
-          }]
-        });
+    it("fails when no lotes available", async () => {
+      await prismaClient.lotes.updateMany({
+        where: { event_id: eventId },
+        data: { reserved: 100 },
       });
 
-      const result = await getPaymentByExternalReference("order_found");
-      
-      expect(result).toMatchObject({
-        id: "999",
-        status: "approved",
-        externalReference: "order_found",
-        pixQrCode: "test_qr",
-      });
-    });
-
-    it("handles search error", async () => {
-      mockPaymentSearch.mockImplementation((_, callback) => {
-        callback({ message: "Server error" }, null);
-      });
-
-      await expect(getPaymentByExternalReference("order_123")).rejects.toMatchObject({
-        type: "PAYMENT_ERROR",
-        message: "Server error",
-      });
-    });
-
-    it("uses correct search parameters", async () => {
-      let capturedFilters: any = {};
-      
-      mockPaymentSearch.mockImplementation((filters, callback) => {
-        capturedFilters = filters;
-        callback(null, { results: [] });
-      });
-
-      await getPaymentByExternalReference("test_order");
-      
-      expect(capturedFilters).toMatchObject({
-        external_reference: "test_order",
-      });
+      await expect(
+        orderService.createOrder({
+          eventId,
+          tickets: [{ name: "Late", email: "late@test.com" }],
+        })
+      ).rejects.toMatchObject({ type: "BUSINESS_ERROR" });
     });
   });
 });

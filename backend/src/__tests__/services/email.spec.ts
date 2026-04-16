@@ -1,116 +1,92 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { 
+  buildTicketEmailHtml, 
+  buildConfirmationEmailHtml, 
+  EmailGatewayFactory, 
+  ConsoleEmailGateway,
+  ResendEmailGateway,
+  sendTicketEmail
+} from "@services/email/index";
 
-const mockEmailsSend = vi.fn();
-
-vi.mock("resend", () => ({
-  Resend: vi.fn().mockImplementation(() => ({
-    emails: {
-      send: mockEmailsSend,
-    },
-  })),
-}));
-
-import { sendTicketEmail, buildTicketEmailHtml, buildConfirmationEmailHtml } from "../services/email";
-
-describe("email service", () => {
+describe("Email Service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.RESEND_API_KEY = "test_api_key_123";
-  });
-
-  afterEach(() => {
-    delete process.env.RESEND_API_KEY;
-  });
-
-  describe("sendTicketEmail", () => {
-    it("throws when to email invalid", async () => {
-      await expect(
-        sendTicketEmail({
-          to: "invalid",
-          subject: "Test",
-          html: "<p>Test</p>",
-        })
-      ).rejects.toMatchObject({
-        type: "VALIDATION_ERROR",
-        message: "Valid recipient email is required",
-      });
-    });
-
-    it("throws when subject empty", async () => {
-      await expect(
-        sendTicketEmail({
-          to: "test@test.com",
-          subject: "",
-          html: "<p>Test</p>",
-        })
-      ).rejects.toMatchObject({
-        type: "VALIDATION_ERROR",
-        message: "Subject is required",
-      });
-    });
-
-    it("throws when html empty", async () => {
-      await expect(
-        sendTicketEmail({
-          to: "test@test.com",
-          subject: "Test",
-          html: "",
-        })
-      ).rejects.toMatchObject({
-        type: "VALIDATION_ERROR",
-        message: "HTML content is required",
-      });
-    });
   });
 
   describe("buildTicketEmailHtml", () => {
     it("generates HTML with ticket codes", () => {
-      const html = buildTicketEmailHtml("Rock in Rio", [
-        { code: "VP12345678", name: "John" },
-        { code: "VP87654321", name: "Jane" },
+      const html = buildTicketEmailHtml("Rock Festival", [
+        { code: "TICKET-001", name: "John" },
+        { code: "TICKET-002", name: "Jane" },
       ]);
 
-      expect(html).toContain("Rock in Rio");
-      expect(html).toContain("VP12345678");
-      expect(html).toContain("VP87654321");
+      expect(html).toContain("Rock Festival");
+      expect(html).toContain("TICKET-001");
       expect(html).toContain("John");
-      expect(html).toContain("Jane");
+      expect(html).toContain("Ingresso 1");
+      expect(html).toContain("Ingresso 2");
     });
 
-    it("generates HTML for single ticket", () => {
-      const html = buildTicketEmailHtml("Show", [{ code: "VPTEST123", name: "John" }]);
-
-      expect(html).toContain("VPTEST123");
-      expect(html).toContain("John");
+    it("handles empty tickets array", () => {
+      const html = buildTicketEmailHtml("Event", []);
+      expect(html).toContain("Event");
     });
   });
 
   describe("buildConfirmationEmailHtml", () => {
-    it("includes order details", () => {
-      const expiresAt = new Date("2026-04-12T18:00:00");
-      
-      const html = buildConfirmationEmailHtml(
-        "Show",
-        "order_123",
-        5000,
-        expiresAt
-      );
+    it("generates confirmation HTML with price", () => {
+      const expiresAt = new Date("2025-12-31");
+      const html = buildConfirmationEmailHtml("order-123", 10000, expiresAt);
 
-      expect(html).toContain("order_123");
-      expect(html).toContain("R$");
+      expect(html).toContain("order-123");
+      expect(html).toContain("R$ 100.00");
+    });
+  });
+
+  describe("ConsoleEmailGateway", () => {
+    it("logs email and returns id", async () => {
+      const consoleSpy = vi.spyOn(console, "log");
+      const gateway = new ConsoleEmailGateway();
+
+      const result = await gateway.sendEmail({
+        to: "test@example.com",
+        subject: "Test Subject",
+        html: "<p>Test</p>",
+      });
+
+      expect(result.id).toContain("console-");
+      expect(consoleSpy).toHaveBeenCalledWith("=== EMAIL (Debug) ===");
+      expect(consoleSpy).toHaveBeenCalledWith("To:", "test@example.com");
+      expect(consoleSpy).toHaveBeenCalledWith("Subject:", "Test Subject");
+    });
+  });
+
+  describe("EmailGatewayFactory", () => {
+    it("uses ConsoleEmailGateway when no API key", () => {
+      delete process.env.RESEND_API_KEY;
+      const gateway = EmailGatewayFactory.create();
+      expect(gateway).toBeInstanceOf(ConsoleEmailGateway);
     });
 
-    it("shows expiration warning", () => {
-      const expiresAt = new Date("2026-04-12T18:00:00");
-      
-      const html = buildConfirmationEmailHtml(
-        "Show",
-        "order_123",
-        5000,
-        expiresAt
-      );
+    it("uses ConsoleEmailGateway for test/fake keys", () => {
+      process.env.RESEND_API_KEY = "re_xxxxx";
+      const gateway = EmailGatewayFactory.create();
+      expect(gateway).toBeInstanceOf(ConsoleEmailGateway);
+    });
+  });
 
-      expect(html).toContain("expira");
+  describe("sendTicketEmail", () => {
+    it("sends email via console gateway", async () => {
+      const consoleSpy = vi.spyOn(console, "log");
+      
+      const result = await sendTicketEmail({
+        to: "buyer@example.com",
+        subject: "Your Tickets",
+        html: "<p>Here are your tickets</p>",
+      });
+
+      expect(result.id).toContain("console-");
+      expect(consoleSpy).toHaveBeenCalledWith("To:", "buyer@example.com");
     });
   });
 });

@@ -1,32 +1,23 @@
 import { prismaClient } from '../lib/prisma';
-import { ApiResponse, ErrorResponse } from '../types/index';
+import { ApiHandlerResult } from '../types/api';
 
-export const healthCheck = async (
-  event: unknown = {}
-): Promise<
-  ApiResponse<
-    | { status: 'healthy'; message: string }
-    | ErrorResponse
-  >
-> => {
+export const healthCheck = async (): Promise<ApiHandlerResult<{ status: string; message: string }>> => {
   try {
     await prismaClient.$queryRaw`SELECT 1`;
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      data: {
         status: 'healthy',
         message: 'Database connection is healthy',
-      }),
+      },
     };
   } catch (error: any) {
     return {
       statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        error: 'Database health check failed',
-        details: error.message,
-      }),
+      error: {
+        type: 'DATABASE_ERROR',
+        message: error.message,
+      },
     };
   }
 };

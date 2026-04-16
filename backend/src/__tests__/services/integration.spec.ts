@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { prismaClient } from "../lib/prisma";
-import { createOrder } from "../services/createOrder";
-import { expireOrders } from "../services/expiration";
+import { prismaClient } from "@lib/prisma";
+import { orderService } from "@services/order/create";
+import { expirationService } from "@services/order/expiration";
 
 describe.skip("complete ticket flow", () => {
   const EVENT_ID = "11111111-1111-1111-1111-111111111111";
@@ -73,7 +73,7 @@ describe.skip("complete ticket flow", () => {
 
     for (let i = 0; i < 100; i++) {
       try {
-        const result = await createOrder({
+        const result = await orderService.createOrder({
           eventId: EVENT_ID,
           tickets: [{ name: `Person ${i + 1}`, email: `person${i + 1}@test.com` }],
         });
@@ -96,7 +96,7 @@ describe.skip("complete ticket flow", () => {
   it("fails to create order when all tickets sold", async () => {
     for (let i = 0; i < 100; i++) {
       try {
-        await createOrder({
+        await orderService.createOrder({
           eventId: EVENT_ID,
           tickets: [{ name: `Person ${i + 1}`, email: `person${i + 1}@test.com` }],
         });
@@ -106,7 +106,7 @@ describe.skip("complete ticket flow", () => {
     }
 
     await expect(
-      createOrder({
+      orderService.createOrder({
         eventId: EVENT_ID,
         tickets: [{ name: "Late Buyer", email: "late@test.com" }],
       })
@@ -118,7 +118,7 @@ describe.skip("complete ticket flow", () => {
 
   it("uses lote 2 when lote 1 is sold out", async () => {
     for (let i = 0; i < 20; i++) {
-      await createOrder({
+      await orderService.createOrder({
         eventId: EVENT_ID,
         tickets: [{ name: `Person ${i + 1}`, email: `p${i + 1}@test.com` }],
       });
@@ -133,7 +133,7 @@ describe.skip("complete ticket flow", () => {
 
   it("uses cheapest lote after expensive ones sold", async () => {
     for (let i = 0; i < 50; i++) {
-      await createOrder({
+      await orderService.createOrder({
         eventId: EVENT_ID,
         tickets: [{ name: `Person ${i + 1}`, email: `p${i + 1}@test.com` }],
       });
@@ -191,7 +191,7 @@ describe("expiration flow", () => {
   });
 
   it("order expires and releases spots back", async () => {
-    const order = await createOrder({
+    const order = await orderService.createOrder({
       eventId: EVENT_ID,
       tickets: [{ name: "Buyer 1", email: "b1@test.com" }],
     });
@@ -205,7 +205,7 @@ describe("expiration flow", () => {
       WHERE id = ${order.orderId}
     `;
 
-    const result = await expireOrders();
+    const result = await expirationService.expireOrders();
     
     expect(result.expiredOrders).toBe(1);
     expect(result.releasedSpots).toBe(1);
@@ -220,7 +220,7 @@ describe("expiration flow", () => {
   });
 
   it("expired order spots can be re-purchased", async () => {
-    const order = await createOrder({
+    const order = await orderService.createOrder({
       eventId: EVENT_ID,
       tickets: [{ name: "Buyer 1", email: "b1@test.com" }],
     });
@@ -231,9 +231,9 @@ describe("expiration flow", () => {
       WHERE id = ${order.orderId}
     `;
 
-    await expireOrders();
+    await expirationService.expireOrders();
 
-    const newOrder = await createOrder({
+    const newOrder = await orderService.createOrder({
       eventId: EVENT_ID,
       tickets: [{ name: "New Buyer", email: "new@test.com" }],
     });
@@ -243,7 +243,7 @@ describe("expiration flow", () => {
   });
 
   it("does not expire paid orders", async () => {
-    const order = await createOrder({
+    const order = await orderService.createOrder({
       eventId: EVENT_ID,
       tickets: [{ name: "Buyer 1", email: "b1@test.com" }],
     });
@@ -259,7 +259,7 @@ describe("expiration flow", () => {
       WHERE id = ${order.orderId}
     `;
 
-    const result = await expireOrders();
+    const result = await expirationService.expireOrders();
     
     expect(result.expiredOrders).toBe(0);
     expect(result.releasedSpots).toBe(0);
