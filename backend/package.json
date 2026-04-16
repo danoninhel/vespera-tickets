@@ -1,43 +1,31 @@
 {
   "name": "vespera-tickets-backend",
   "version": "1.0.0",
-  "description": "Backend serverless para venda de ingressos (Vespera)",
-  "main": "dist/index.js",
+  "description": "Backend for Vespera Tickets",
   "type": "module",
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "watch": "tsc --watch",
-    "serve": "serverless offline",
-    "start": "node --import tsx serverless-offline.ts",
-    "dev": "node --import tsx serverless-offline.ts",
-    "deploy": "serverless deploy",
+    "dev": "node --import tsx src/server.ts",
     "test": "vitest --run"
   },
-  "author": "",
-  "license": "MIT",
-  "devDependencies": {
-    "@types/mercadopago": "^1.5.11",
-    "@types/node": "^25.5.2",
-    "@types/node-cron": "^3.0.11",
-    "@types/pg": "^8.20.0",
-    "concurrently": "^8.2.2",
-    "esbuild": "^0.27.7",
-    "prisma": "^7.7.0",
-    "serverless-esbuild": "^1.57.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3",
-    "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.4"
-  },
   "dependencies": {
+    "@fastify/cors": "^11.2.0",
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
     "dotenv": "^17.4.1",
-    "mercadopago": "^1.1.1",
+    "fastify": "^5.8.5",
+    "mercadopago": "^2.12.0",
     "node-cron": "^3.0.3",
     "pg": "^8.20.0",
-    "resend": "^4.8.0",
-    "serverless": "^4.33.3",
-    "serverless-offline": "^14.5.0"
+    "resend": "^4.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "@types/node-cron": "^3.0.11",
+    "@types/pg": "^8.20.0",
+    "prisma": "^7.7.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.4"
   }
 }
