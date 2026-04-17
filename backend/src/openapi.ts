@@ -3,20 +3,66 @@ export const openapiSchema = {
   info: {
     title: "Vespera Tickets API",
     description: `
-## Overview
-API for selling event tickets with Mercado Pago integration.
+# Vespera Tickets API
+
+API for selling event tickets with Mercado Pago Pix integration.
+
+## Quick Start
+
+\`\`\`bash
+# 1. Create an event
+curl -X POST http://localhost:3000/events \\
+  -H "Content-Type: application/json" \\
+  -d '{"title":"My Event","description":"Cool show","image_url":"https://example.com/img.jpg","capacity":100,"artists":["Band"],"lotes":[{"name":"VIP","price":10000,"total":30}]}'
+
+# 2. Create an order
+curl -X POST http://localhost:3000/orders \\
+  -H "Content-Type: application/json" \\
+  -d '{"event_id":"<EVENT_ID>","tickets":[{"name":"John","email":"john@test.com"}]}'
+
+# 3. Get Pix QR code and pay
+# Use pix_qr_code with your bank app
+
+# 4. Check order status
+curl http://localhost:3000/orders/<ORDER_ID>
+
+# 5. After payment, get tickets
+curl http://localhost:3000/orders/<ORDER_ID>/tickets
+\`\`\`
+
+## Complete Flow
+
+\`\`\`
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  1. List   │    │  2. Create  │    │  3. Pay     │
+│  Events    │───▶│  Order      │───▶│  Pix QR     │
+└─────────────┘    └─────────────┘    └─────────────┘
+                                           │
+                                           ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  7. Entry  │◀───│  6. Get    │◀───│5. Webhook  │
+│  Validate  │    │  Tickets   │    │  Confirm   │
+└─────────────┘    └─────────────┘    └─────────────┘
+\`\`\`
+
+1. **GET /events** - Browse available events
+2. **POST /orders** - Select event and tickets → Get Pix QR
+3. Pay Pix using your bank app
+4. **POST /webhook** - Mercado Pago notifies (auto)
+5. **GET /orders/:id/tickets** - Get purchased tickets
+6. **POST /tickets/validate** - Scan ticket at event entry
 
 ## Authentication
 Currently no authentication required (MVP). Rate limited to 100 requests/minute.
 
-## Payment Flow
-1. Create order → Get Pix QR code
-2. Customer pays via Pix
-3. Mercado Pago sends webhook → Order confirmed
-4. Tickets are generated automatically
+## Webhook Setup
+Configure Mercado Pago webhook URL to: \`https://your-domain.com/webhook\`
 
-## Webhook
-Configure your Mercado Pago webhook URL to point to: \`/webhook\`
+## Common Responses
+- **PENDING** - Awaiting payment
+- **PAID** - Payment confirmed, tickets generated
+- **EXPIRED** - Payment not received in 10 minutes
+
     `,
     version: "1.0.0",
     contact: {
