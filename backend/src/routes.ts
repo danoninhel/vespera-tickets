@@ -25,11 +25,38 @@ export async function registerRoutes(server: FastifyInstance): Promise<void> {
   server.get("/", async () => ({ 
     name: "Vespera Tickets API", 
     version: "1.0.0",
-    docs: "/docs.html",
+    docs: "/docs",
     spec: "/openapi.json"
   }));
 
   server.get("/openapi.json", async () => openapiSchema);
+
+  server.get("/docs", async (request, reply) => {
+    const docsHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vespera Tickets API - Swagger</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.0/swagger-ui.css">
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.0/swagger-ui-bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.0/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = () => {
+      SwaggerUIBundle({
+        url: '/openapi.json',
+        dom_id: '#swagger-ui',
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        layout: 'StandaloneLayout',
+      });
+    };
+  </script>
+</body>
+</html>`;
+    return reply.type("text/html").send(docsHtml);
+  });
 
   server.get("/docs.html", async (request, reply) => {
     const docsHtml = `<!DOCTYPE html>
