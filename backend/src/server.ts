@@ -2,6 +2,7 @@ import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
+import helmet from "@fastify/helmet";
 import { registerRoutes } from "./routes";
 import { startCron } from "./cron";
 
@@ -14,6 +15,17 @@ const server = Fastify({
 });
 
 async function start(): Promise<void> {
+  await server.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+      },
+    },
+  });
+
   await server.register(rateLimit, {
     max: 100,
     timeWindow: "1 minute",
