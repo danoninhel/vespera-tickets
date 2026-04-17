@@ -51,6 +51,25 @@ export class TicketRepository {
       where: { event_id: eventId },
     });
   }
+
+  async markAsCheckedIn(code: string): Promise<TicketEntity | null> {
+    const ticket = await prismaClient.tickets.findFirst({
+      where: { code },
+    });
+    if (!ticket) return null;
+    if (ticket.checked_in) return ticket;
+    
+    return await prismaClient.tickets.update({
+      where: { id: ticket.id },
+      data: { checked_in: true },
+    });
+  }
+
+  async findWithOrderIdAndEventId(orderId: string, eventId: string): Promise<TicketEntity[]> {
+    return await prismaClient.tickets.findMany({
+      where: { order_id: orderId, event_id: eventId },
+    });
+  }
 }
 
 export const ticketRepository = new TicketRepository();

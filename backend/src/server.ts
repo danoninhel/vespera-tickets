@@ -67,6 +67,9 @@ async function start(): Promise<void> {
       { method: "GET", path: "/events/:id" },
       { method: "POST", path: "/events" },
       { method: "POST", path: "/orders" },
+      { method: "GET", path: "/orders/:id" },
+      { method: "GET", path: "/orders/:id/tickets" },
+      { method: "POST", path: "/tickets/validate" },
       { method: "POST", path: "/webhook" },
       { method: "POST", path: "/expire" },
     ];

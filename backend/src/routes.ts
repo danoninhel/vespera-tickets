@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { getEvents, getEvent, createEvent } from "./handlers/events";
 import { createOrder } from "./handlers/createOrderHandler";
+import { getOrder } from "./handlers/getOrder";
+import { getOrderTickets, validateTicket } from "./handlers/validateTicket";
 import { webhook } from "./handlers/webhook";
 import { expireOrders } from "./handlers/expiration";
 import { healthCheck } from "./handlers/health";
@@ -37,6 +39,26 @@ export async function registerRoutes(server: FastifyInstance): Promise<void> {
   server.post("/events", toFastifyHandler(createEvent));
 
   server.post("/orders", toFastifyHandler(createOrder));
+
+  server.get("/orders/:id", async (request, reply) => {
+    const result = await getOrder(request.params as any);
+    return reply.code(result.statusCode).send(
+      result.error 
+        ? { error: result.error, success: false }
+        : { ...result.data, success: true }
+    );
+  });
+
+  server.get("/orders/:id/tickets", async (request, reply) => {
+    const result = await getOrderTickets(request.params as any);
+    return reply.code(result.statusCode).send(
+      result.error 
+        ? { error: result.error, success: false }
+        : { ...result.data, success: true }
+    );
+  });
+
+  server.post("/tickets/validate", toFastifyHandler(validateTicket));
 
   server.post("/webhook", toFastifyHandler(webhook));
 

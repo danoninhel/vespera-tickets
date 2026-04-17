@@ -67,6 +67,22 @@ export class OrderRepository {
       where: { payment_id: paymentId },
     });
   }
+
+  async findWithDetails(id: string): Promise<(OrderEntity & { event_title: string }) | null> {
+    const order = await prismaClient.orders.findUnique({
+      where: { id },
+      include: {
+        events: {
+          select: { title: true },
+        },
+      },
+    });
+    if (!order) return null;
+    return {
+      ...order,
+      event_title: order.events.title,
+    };
+  }
 }
 
 export const orderRepository = new OrderRepository();
