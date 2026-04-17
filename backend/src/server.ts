@@ -3,11 +3,8 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import helmet from "@fastify/helmet";
-import swagger from "@fastify/swagger";
-import swaggerUi from "@fastify/swagger-ui";
 import { registerRoutes } from "./routes";
 import { startCron } from "./cron";
-import { openapiSchema } from "./openapi";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 const isProduction = process.env.NODE_ENV === "production";
@@ -36,19 +33,7 @@ async function start(): Promise<void> {
     errorResponseBuilder: () => ({ error: "Too many requests" }),
   });
 
-  await server.register(cors, { origin: true });
-
-  await server.register(swagger, {
-    openapi: openapiSchema,
-  });
-
-  await server.register(swaggerUi, {
-    routePrefix: "/docs",
-    uiConfig: {
-      docExpansion: "list",
-      deepLinking: true,
-    },
-  });
+await server.register(cors, { origin: true });
 
   await registerRoutes(server);
   startCron();
