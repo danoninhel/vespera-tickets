@@ -3,6 +3,8 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import helmet from "@fastify/helmet";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import { registerRoutes } from "./routes";
 import { startCron } from "./cron";
 
@@ -34,6 +36,38 @@ async function start(): Promise<void> {
   });
 
   await server.register(cors, { origin: true });
+
+  await server.register(swagger, {
+    openapi: {
+      info: {
+        title: "Vespera Tickets API",
+        description: "API for selling event tickets with Mercado Pago integration",
+        version: "1.0.0",
+      },
+      servers: [
+        { url: `http://localhost:${PORT}`, description: "Local development" },
+        { url: "https://your-domain.com", description: "Production" },
+      ],
+      components: {
+        securitySchemes: {
+          apiKey: {
+            type: "apiKey",
+            in: "header",
+            name: "X-API-Key",
+          },
+        },
+      },
+    },
+  });
+
+  await server.register(swaggerUi, {
+    routePrefix: "/docs",
+    uiConfig: {
+      docExpansion: "list",
+      deepLinking: true,
+    },
+  });
+
   await registerRoutes(server);
   startCron();
 
